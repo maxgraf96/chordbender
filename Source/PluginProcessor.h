@@ -10,7 +10,7 @@
 #include <JuceHeader.h>
 #include <readerwriterqueue.h>
 
-class ChordBenderAudioProcessor  : public juce::AudioProcessor, public juce::HighResolutionTimer
+class ChordBenderAudioProcessor  : public juce::AudioProcessor
 {
 public:
     ChordBenderAudioProcessor();
@@ -40,21 +40,42 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    void hiResTimerCallback() override;
-
     // Not really equal but equal for our means
     bool midiEqual(const MidiMessage& m1, const MidiMessage& m2){
         return m1.getChannel() == m2.getChannel() &&
                m1.getNoteNumber() == m2.getNoteNumber();
     }
 
+    int getClosestTargetNotePitch(const MidiMessage& sourceNote){
+        int closestIndex = -1;
+        int closestDistance = 1000000;
+        for(int i = 0; i < targetNotes.size(); i++){
+            int distance = std::abs(sourceNote.getNoteNumber() - targetNotes[i].getNoteNumber());
+            if(distance < closestDistance){
+                closestDistance = distance;
+                closestIndex = i;
+            }
+        }
+        return targetNotes[closestIndex].getNoteNumber();
+    }
+
 private:
-    int bendDuration = 200; // ms
+    int targetNotesReceiveWindowFromFirstNote = 44100; // samples
+    // "Timer" for window for listening to target notes in samples
+    int targetNotesSampleCounter = 0;
+
+    int bendDuration = 1000; // ms
+    int bendProgress = 0;
+
     std::vector<MidiMessage> activeNotes;
     std::vector<MidiMessage> sourceNotes;
     std::vector<MidiMessage> targetNotes;
+    // When we start bending, this will hold the target pitches for each source note
+    std::vector<int> sourceNoteTargetPitches;
 
+    std::atomic<bool> acceptActiveNotes = true;
     std::atomic<bool> acceptTarget = false;
+    std::atomic<bool> isBending = false;
 
     // This one is connected to the message receiver thread
 //    moodycamel::ReaderWriterQueue<MIDIMessage> editorQueue;

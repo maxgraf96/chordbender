@@ -74,14 +74,69 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
     if(isBending){
         // Bend start
         if(bendProgress == 0){
+            sourceNoteTargetPitches.clear();
             // We're done receiving target notes
             // Let's figure out the bends
-            // For each source note, we need to find the closest target note
-            sourceNoteTargetPitches.clear();
-            for(const auto& sourceNote : sourceNotes){
-                int targetNotePitch = getClosestTargetNotePitch(sourceNote);
-                sourceNoteTargetPitches.push_back(targetNotePitch);
+            // For each source note, we need to find the matching target note
+            std::map<MidiMessage, std::vector<MidiMessage>, ChordBenderAudioProcessor::MidiMessageLess> mapping = findSourceTargetMapping(sourceNotes, targetNotes);
+
+            // Let's start with the simple case that we have 1 source note and 2 target notes
+            // Let's assume 3 cases:
+            // 1. sourceNotes.size() == targetNotes.size()
+            if(sourceNotes.size() == targetNotes.size()){
+                for(auto& targetNote : targetNotes){
+                    sourceNoteTargetPitches.push_back(targetNote.getNoteNumber());
+                }
             }
+
+            // 2. sourceNotes.size() < targetNotes.size()
+            // In this case, we need to spawn new source notes, and map them to the target notes
+            if(sourceNotes.size() < targetNotes.size()){
+                for(auto& sourceNote : sourceNotes){
+                    if(mapping[sourceNote].size() == 1){
+                        // This source note has only one target note, so we can just use that
+                        sourceNoteTargetPitches.push_back(mapping[sourceNote][0].getNoteNumber());
+                    } else {
+                        // This source note has multiple target notes, so we need to spawn new source notes
+                        // and map them to the target notes
+                        int toSpawnRemaining = mapping[sourceNote].size() - 1;
+                        for(auto& targetNote : mapping[sourceNote]){
+                            // Add the target note pitch to the source note target pitches vector
+                            sourceNoteTargetPitches.push_back(targetNote.getNoteNumber());
+
+                            if(toSpawnRemaining > 0){
+                                // Create a new source note
+                                auto channel = channelCounter++;
+                                if(channelCounter > 16)
+                                    channelCounter = 1;
+
+                                auto srcNoteNumber = sourceNote.getNoteNumber();
+                                auto vel = sourceNote.getVelocity();
+                                juce::MidiMessage newSourceNote = juce::MidiMessage::noteOn(channel, srcNoteNumber, sourceNote.getVelocity());
+                                // Add the new source note to the source notes vector
+                                sourceNotes.push_back(newSourceNote);
+                                // Add the target note to the target notes vector
+                                targetNotes.push_back(targetNote);
+                                // Add midi message to out so it's played
+                                keepMidiMessages.addEvent(newSourceNote, 0);
+                                toSpawnRemaining--;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. sourceNotes.size() > targetNotes.size()
+            // In this case, we just need to map multiple source notes to their individual target note
+            if(sourceNotes.size() > targetNotes.size()){
+                for(auto& sourceNote : sourceNotes){
+                    if(mapping[sourceNote].size() > 1){
+                        int a = -1;
+                    }
+                    sourceNoteTargetPitches.push_back(mapping[sourceNote][0].getNoteNumber());
+                }
+            }
+
         }
         // We're bending
         // For each source note, send the adequate pitch bend message, depending on the bendProgress / bendDuration
@@ -92,15 +147,14 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             const auto targetPitch = sourceNoteTargetPitches[i];
             // Get the current pitch
             const auto sourcePitch = sourceNote.getNoteNumber();
-            // Get the channel
+            // Get the channel from sourceChannels
             const auto channel = sourceNote.getChannel();
             // Calculate the pitch bend value
             const auto pitchBendDiffSemitones = targetPitch - sourcePitch;
 
-            const auto isBendingUp = pitchBendDiffSemitones > 0;
-
             // map pitchBendDiffSemitones to the actual pitch wheel value, considering that we can bend
             // +/- 12 semitones
+            // TODO this is probably wrong - it's a little off.
             const int pitchBendTarget = 8191 + pitchBendDiffSemitones * 8192 / 12;
 
             auto bendProgressNormalized = bendProgress / (double) bendDuration;
@@ -112,23 +166,16 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             }
 
             MidiMessage pitchBendMessage;
-            if(isBendingUp){
-                // We're bending up
-                // Map from [0, bendDuration] to [8192, pitchBendTarget]
-                // TODO proper map function
-                const auto pitchBendValueMapped = (int) (1.0f - bendProgressNormalized) * 8191 + (pitchBendTarget * bendProgressNormalized);
-                // Create the pitch bend message
-                pitchBendMessage = juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped);
-            } else {
-                // We're bending down
-                // Map from [0, bendDuration] to [8192, pitchBendTarget]
-                const auto pitchBendValueMapped = (int) ((1 - bendProgressNormalized) * 8192);
-                // Create the pitch bend message
-                pitchBendMessage = juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped);
-            }
-
+            const auto pitchBendValueMapped = (int) mapFloat(
+                    (float) bendProgressNormalized,
+                    0.0f, 1.0f,
+                    8192.0f,
+                    (float) pitchBendTarget
+            );
+            // Create the pitch bend message
+            pitchBendMessage = juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped);
             // Add the pitch bend message to the buffer
-            keepMidiMessages.addEvent(pitchBendMessage, 0);
+            keepMidiMessages.addEvent(pitchBendMessage, 10);
         }
 
         // Update the bend progress
@@ -166,11 +213,21 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             // Get the velocity
             const auto velocity = msg.getVelocity();
             // Get the channel
-            const auto channel = msg.getChannel();
-            // Create a new note on message
+            const auto channel = channelCounter;
+            channelCounter++;
+            if(channelCounter > 16)
+                channelCounter = 1;
+            // Create a new note-on message
             juce::MidiMessage newMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
 
             if(acceptActiveNotes){
+                if(activeNotes.empty()){
+                    // Before the first new active note, reset pitch bend on all channels
+                    for(int i = 1; i < 17; i++){
+                        auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(i, 8192);
+                        keepMidiMessages.addEvent(pitchBendResetMessage, 0);
+                    }
+                }
                 activeNotes.push_back(newMessage);
                 keepMidiMessages.addEvent(msg, metadata.samplePosition);
             } else {
@@ -206,10 +263,17 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                 continue;
             }
 
+            // Convert active notes to source notes
             for(auto it = activeNotes.begin(); it != activeNotes.end(); ++it){
                 if(midiEqual(*it, newMessage)){
+                    // Get channel from active note
+                    int channel = (*it).getChannel();
                     activeNotes.erase(it);
-                    sourceNotes.push_back(newMessage);
+                    // Source notes must be in round robin fashion, midi message type doesn't matter
+                    // we just neet to keep track of the note number and the channel
+                    juce::MidiMessage srcMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
+                    sourceNotes.push_back(srcMessage);
+
                     if(activeNotes.empty()){
                         // So, receiving target notes now
                         targetNotes.clear();
@@ -242,6 +306,87 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
 
     // Clear audio buffer
     buffer.clear();
+}
+
+std::map<MidiMessage, std::vector<MidiMessage>, ChordBenderAudioProcessor::MidiMessageLess> ChordBenderAudioProcessor::findSourceTargetMapping(
+        std::vector<MidiMessage>& sourceNotes,
+        std::vector<MidiMessage>& targetNotes
+) {
+    std::map<MidiMessage, std::vector<MidiMessage>, ChordBenderAudioProcessor::MidiMessageLess> mapping;
+
+    // Sort both vectors based on note number
+    std::sort(sourceNotes.begin(), sourceNotes.end(), [](const MidiMessage& a, const MidiMessage& b) {
+        return a.getNoteNumber() < b.getNoteNumber();
+    });
+    std::sort(targetNotes.begin(), targetNotes.end(), [](const MidiMessage& a, const MidiMessage& b) {
+        return a.getNoteNumber() < b.getNoteNumber();
+    });
+
+    if (sourceNotes.size() >= targetNotes.size()) {
+        std::vector<bool> sourceMapped(sourceNotes.size(), false);
+
+        // For each target note, find the closest unmapped source note
+        for (const MidiMessage& target : targetNotes) {
+            int minDistance = INT_MAX;
+            int closestIndex = -1;
+
+            for (size_t i = 0; i < sourceNotes.size(); ++i) {
+                if (!sourceMapped[i]) {
+                    int distance = std::abs(target.getNoteNumber() - sourceNotes[i].getNoteNumber());
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestIndex = i;
+                    }
+                }
+            }
+
+            if (closestIndex != -1) {
+                mapping[sourceNotes[closestIndex]].push_back(target);
+                sourceMapped[closestIndex] = true;
+            }
+        }
+
+        // For unmapped source notes, map to the closest target note
+        for (size_t i = 0; i < sourceNotes.size(); ++i) {
+            if (!sourceMapped[i]) {
+                MidiMessage closest = targetNotes[0];
+                int minDistance = std::abs(sourceNotes[i].getNoteNumber() - closest.getNoteNumber());
+
+                for (const MidiMessage& target : targetNotes) {
+                    int distance = std::abs(sourceNotes[i].getNoteNumber() - target.getNoteNumber());
+                    if (distance < minDistance) {
+                        closest = target;
+                        minDistance = distance;
+                    }
+                }
+
+                mapping[sourceNotes[i]].push_back(closest);
+            }
+        }
+    } else {
+        // Divide the target notes into segments based on the number of source notes
+        size_t segmentSize = targetNotes.size() / sourceNotes.size();
+        size_t remainder = targetNotes.size() % sourceNotes.size();
+
+        size_t targetIndex = 0;
+        for (const MidiMessage& source : sourceNotes) {
+            std::vector<MidiMessage> segment;
+            for (size_t i = 0; i < segmentSize; ++i, ++targetIndex) {
+                segment.push_back(targetNotes[targetIndex]);
+            }
+
+            // Distribute the remainder among the segments
+            if (remainder > 0) {
+                segment.push_back(targetNotes[targetIndex]);
+                ++targetIndex;
+                --remainder;
+            }
+
+            mapping[source] = segment;
+        }
+    }
+
+    return mapping;
 }
 
 bool ChordBenderAudioProcessor::hasEditor() const {

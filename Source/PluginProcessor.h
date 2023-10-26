@@ -7,8 +7,10 @@
 
 #pragma once
 
+#include <map>
+#include <vector>
+#include <algorithm>
 #include <JuceHeader.h>
-#include <readerwriterqueue.h>
 
 class ChordBenderAudioProcessor  : public juce::AudioProcessor
 {
@@ -42,9 +44,24 @@ public:
 
     // Not really equal but equal for our means
     bool midiEqual(const MidiMessage& m1, const MidiMessage& m2){
-        return m1.getChannel() == m2.getChannel() &&
-               m1.getNoteNumber() == m2.getNoteNumber();
+        return m1.getNoteNumber() == m2.getNoteNumber();
     }
+
+    static float mapFloat(float value, float in_min, float in_max, float out_min, float out_max) {
+        return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    }
+
+    struct MidiMessageLess {
+        bool operator()(const MidiMessage& a, const MidiMessage& b) const {
+            return a.getNoteNumber() < b.getNoteNumber();
+        }
+    };
+
+    std::map<MidiMessage, std::vector<MidiMessage>, MidiMessageLess> findSourceTargetMapping(
+            std::vector<MidiMessage>& sourceNotes,
+            std::vector<MidiMessage>& targetNotes
+            );
+
 
     int getClosestTargetNotePitch(const MidiMessage& sourceNote){
         int closestIndex = -1;
@@ -67,6 +84,7 @@ private:
     int bendDuration = 1000; // ms
     int bendProgress = 0;
 
+    int channelCounter = 1;
     std::vector<MidiMessage> activeNotes;
     std::vector<MidiMessage> sourceNotes;
     std::vector<MidiMessage> targetNotes;

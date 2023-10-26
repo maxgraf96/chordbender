@@ -40,13 +40,13 @@ juce_generate_juce_header(chordbender)
 
 target_sources(chordbender PRIVATE ${SOURCES} ${HEADERS})
 
-include(FetchContent)
-FetchContent_Declare(
-        readerwriterqueue
-        GIT_REPOSITORY    https://github.com/cameron314/readerwriterqueue
-        GIT_TAG           master
-)
-FetchContent_MakeAvailable(readerwriterqueue)
+#include(FetchContent)
+#FetchContent_Declare(
+#        readerwriterqueue
+#        GIT_REPOSITORY    https://github.com/cameron314/readerwriterqueue
+#        GIT_TAG           master
+#)
+#FetchContent_MakeAvailable(readerwriterqueue)
 
 target_compile_definitions(chordbender
         PRIVATE
@@ -56,7 +56,7 @@ target_compile_definitions(chordbender
 
 target_link_libraries(chordbender
         PUBLIC
-        readerwriterqueue
+#        readerwriterqueue
 
         PRIVATE
         juce::juce_audio_basics

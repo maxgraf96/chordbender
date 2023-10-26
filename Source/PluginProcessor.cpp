@@ -69,12 +69,53 @@ void ChordBenderAudioProcessor::releaseResources() {
 void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages) {
     // Process incoming MIDI messages and generate output MIDI messages
     // Look for MIDI messages in the queue
-//    midiMessages.clear();
 
+    // Look for note ons
+    for (const auto metadata : midiMessages) {
+        const auto msg = metadata.getMessage();
+        if (msg.isNoteOn()) {
+            // Get the note number
+            const auto noteNumber = msg.getNoteNumber();
+            // Get the velocity
+            const auto velocity = msg.getVelocity();
+            // Get the channel
+            const auto channel = msg.getChannel();
+            // Create a new note on message
+            juce::MidiMessage newMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
+
+            activeNotes.push_back(newMessage);
+        }
+        if (msg.isNoteOff()){
+            // Get the note number
+            const auto noteNumber = msg.getNoteNumber();
+            // Get the velocity
+            const auto velocity = msg.getVelocity();
+            // Get the channel
+            const auto channel = msg.getChannel();
+            // Create a new note on message
+            juce::MidiMessage newMessage = juce::MidiMessage::noteOff(channel, noteNumber, velocity);
+
+            for(auto it = activeNotes.begin(); it != activeNotes.end(); ++it){
+                if(midiEqual(*it, newMessage)){
+                    activeNotes.erase(it);
+                    sourceNotes.push_back(newMessage);
+
+                    // Start timer here
+
+                    break;
+                }
+            }
+        }
+    }
 
 
     // Clear audio buffer
     buffer.clear();
+}
+
+void ChordBenderAudioProcessor::hiResTimerCallback() {
+
+    stopTimer();
 }
 
 bool ChordBenderAudioProcessor::hasEditor() const {

@@ -10,7 +10,7 @@
 #include <JuceHeader.h>
 #include <readerwriterqueue.h>
 
-class ChordBenderAudioProcessor  : public juce::AudioProcessor
+class ChordBenderAudioProcessor  : public juce::AudioProcessor, public juce::HighResolutionTimer
 {
 public:
     ChordBenderAudioProcessor();
@@ -40,7 +40,22 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    void hiResTimerCallback() override;
+
+    // Not really equal but equal for our means
+    bool midiEqual(const MidiMessage& m1, const MidiMessage& m2){
+        return m1.getChannel() == m2.getChannel() &&
+               m1.getNoteNumber() == m2.getNoteNumber();
+    }
+
 private:
+    int bendDuration = 200; // ms
+    std::vector<MidiMessage> activeNotes;
+    std::vector<MidiMessage> sourceNotes;
+    std::vector<MidiMessage> targetNotes;
+
+    std::atomic<bool> acceptTarget = false;
+
     // This one is connected to the message receiver thread
 //    moodycamel::ReaderWriterQueue<MIDIMessage> editorQueue;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChordBenderAudioProcessor)

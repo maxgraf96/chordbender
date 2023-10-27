@@ -196,8 +196,9 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             keepMidiMessages.addEvent(pitchBendMessage, 0);
         }
 
+
         // Update the bend progress
-        bendProgress += (int) ((float)buffer.getNumSamples() / 44100.0f * 1000.0f);
+        bendProgress += (int) ((float)buffer.getNumSamples() / 44100.0f * (float) bendDuration);
         if(bendProgress > bendDuration){
             // We're done bending
             isBending = false;

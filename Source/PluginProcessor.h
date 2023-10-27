@@ -84,7 +84,7 @@ private:
     int bendDuration = 1000; // ms
     int bendProgress = 0;
 
-    int channelCounter = 1;
+    int channelCounter = 2;
     std::vector<MidiMessage> activeNotes;
     std::vector<MidiMessage> sourceNotes;
     std::vector<MidiMessage> targetNotes;

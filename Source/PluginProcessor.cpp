@@ -107,8 +107,8 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                             if(toSpawnRemaining > 0){
                                 // Create a new source note
                                 auto channel = channelCounter++;
-                                if(channelCounter > 16)
-                                    channelCounter = 1;
+                                if(channelCounter > 15)
+                                    channelCounter = 2;
 
                                 auto srcNoteNumber = sourceNote.getNoteNumber();
                                 auto vel = sourceNote.getVelocity();
@@ -154,8 +154,7 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
 
             // map pitchBendDiffSemitones to the actual pitch wheel value, considering that we can bend
             // +/- 12 semitones
-            // TODO this is probably wrong - it's a little off.
-            const int pitchBendTarget = 8191 + pitchBendDiffSemitones * 8192 / 12;
+            const int pitchBendTarget = (int) (((float)pitchBendDiffSemitones / 12.0f * 8192.0f) + 8191.0f);
 
             auto bendProgressNormalized = bendProgress / (double) bendDuration;
             // clamp bendProgressNormalized to [0, 1]
@@ -165,17 +164,14 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                 bendProgressNormalized = 0;
             }
 
-            MidiMessage pitchBendMessage;
             const auto pitchBendValueMapped = (int) mapFloat(
                     (float) bendProgressNormalized,
                     0.0f, 1.0f,
                     8192.0f,
                     (float) pitchBendTarget
             );
-            // Create the pitch bend message
-            pitchBendMessage = juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped);
             // Add the pitch bend message to the buffer
-            keepMidiMessages.addEvent(pitchBendMessage, 10);
+            keepMidiMessages.addEvent(juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped), 0);
         }
 
         // Update the bend progress
@@ -215,8 +211,8 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             // Get the channel
             const auto channel = channelCounter;
             channelCounter++;
-            if(channelCounter > 16)
-                channelCounter = 1;
+            if(channelCounter > 15)
+                channelCounter = 2;
             // Create a new note-on message
             juce::MidiMessage newMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
 
@@ -229,7 +225,7 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                     }
                 }
                 activeNotes.push_back(newMessage);
-                keepMidiMessages.addEvent(msg, metadata.samplePosition);
+                keepMidiMessages.addEvent(newMessage, metadata.samplePosition);
             } else {
                 if(targetNotes.empty()){
                     // From the point where we receive the first target note, we start a timer

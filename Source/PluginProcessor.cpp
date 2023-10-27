@@ -71,7 +71,26 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
     // Look for MIDI messages in the queue
     juce::MidiBuffer keepMidiMessages;
 
+    auto* playhead = getPlayHead();
+    if(playhead != nullptr){
+        if(playhead->getPosition().hasValue()){
+            if(!playhead->getPosition()->getIsPlaying()){
+                // Reset everything
+                activeNotes.clear();
+                sourceNotes.clear();
+                targetNotes.clear();
+                sourceNoteTargetPitches.clear();
+                acceptActiveNotes = true;
+                acceptTarget = false;
+                isBending = false;
+            }
+        }
+    }
+
     if(isBending){
+        // Send master pitch bend message
+        auto masterPitchBendMessage = juce::MidiMessage::pitchWheel(1, 8192);
+        keepMidiMessages.addEvent(masterPitchBendMessage, 0);
         // Bend start
         if(bendProgress == 0){
             sourceNoteTargetPitches.clear();
@@ -107,7 +126,7 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                             if(toSpawnRemaining > 0){
                                 // Create a new source note
                                 auto channel = channelCounter++;
-                                if(channelCounter > 15)
+                                if(channelCounter > 16)
                                     channelCounter = 2;
 
                                 auto srcNoteNumber = sourceNote.getNoteNumber();
@@ -130,9 +149,6 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             // In this case, we just need to map multiple source notes to their individual target note
             if(sourceNotes.size() > targetNotes.size()){
                 for(auto& sourceNote : sourceNotes){
-                    if(mapping[sourceNote].size() > 1){
-                        int a = -1;
-                    }
                     sourceNoteTargetPitches.push_back(mapping[sourceNote][0].getNoteNumber());
                 }
             }
@@ -153,15 +169,13 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             const auto pitchBendDiffSemitones = targetPitch - sourcePitch;
 
             // map pitchBendDiffSemitones to the actual pitch wheel value, considering that we can bend
-            // +/- 12 semitones
-            const int pitchBendTarget = (int) (((float)pitchBendDiffSemitones / 12.0f * 8192.0f) + 8191.0f);
+            // +/- 48 semitones (MPE default)
+            const int pitchBendTarget = (int) (((float)pitchBendDiffSemitones / 48.0f * 8192.0f) + 8191.0f);
 
             auto bendProgressNormalized = bendProgress / (double) bendDuration;
             // clamp bendProgressNormalized to [0, 1]
             if(bendProgressNormalized > 1){
                 bendProgressNormalized = 1;
-            } else if(bendProgressNormalized < 0){
-                bendProgressNormalized = 0;
             }
 
             const auto pitchBendValueMapped = (int) mapFloat(
@@ -171,7 +185,15 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                     (float) pitchBendTarget
             );
             // Add the pitch bend message to the buffer
-            keepMidiMessages.addEvent(juce::MidiMessage::pitchWheel(channel, pitchBendValueMapped), 0);
+//            keepMidiMessages.addEvent(juce::MidiMessage::pitchWheel(channel , pitchBendValueMapped), 0);
+
+            // Construct pitch bend message manually
+            auto statusByte = 0xE0 | (channel - 1);
+            auto lsb = pitchBendValueMapped & 0x7F;
+            auto msb = (pitchBendValueMapped >> 7) & 0x7F;
+
+            auto pitchBendMessage = juce::MidiMessage(statusByte, lsb, msb);
+            keepMidiMessages.addEvent(pitchBendMessage, 0);
         }
 
         // Update the bend progress
@@ -182,22 +204,42 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             activeNotes.clear();
             // Clear the source notes
             sourceNotes.clear();
+
+            // First, all source notes off
+            for(int i = 2; i < 16; i++){
+                auto noteOffMessage = juce::MidiMessage::allNotesOff(i);
+                keepMidiMessages.addEvent(noteOffMessage, 0);
+            }
+            // Previous target notes become new source notes -> note on
+            for(auto& sourceNoteTargetPitch : sourceNoteTargetPitches){
+                auto channel = channelCounter++;
+                if(channelCounter > 16)
+                    channelCounter = 2;
+                auto targetNoteNumber = sourceNoteTargetPitch;
+                uint8 vel = 70;
+                juce::MidiMessage newSourceNotePBReset = juce::MidiMessage::pitchWheel(channel, 8192);
+                juce::MidiMessage newSourceNote = juce::MidiMessage::noteOn(channel, targetNoteNumber, vel);
+                sourceNotes.push_back(newSourceNote);
+                keepMidiMessages.addEvent(newSourceNotePBReset, 0);
+                keepMidiMessages.addEvent(newSourceNote, 0);
+            }
+
             // Clear the target notes
             targetNotes.clear();
             // Clear the source note target pitches
             sourceNoteTargetPitches.clear();
             // We're now accepting active notes
-            acceptActiveNotes = true;
+            acceptActiveNotes = false;
             // We're no longer accepting target notes
-            acceptTarget = false;
+            acceptTarget = true;
+        } else {
+            // Swap midi buffers
+            midiMessages.swapWith(keepMidiMessages);
+
+            // Clear audio buffer
+            buffer.clear();
+            return;
         }
-
-        // Swap midi buffers
-        midiMessages.swapWith(keepMidiMessages);
-
-        // Clear audio buffer
-        buffer.clear();
-        return;
     }
 
     // Look for note ons
@@ -211,28 +253,30 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             // Get the channel
             const auto channel = channelCounter;
             channelCounter++;
-            if(channelCounter > 15)
+            if(channelCounter > 16)
                 channelCounter = 2;
             // Create a new note-on message
-            juce::MidiMessage newMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
+            juce::MidiMessage noteOnMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
 
             if(acceptActiveNotes){
-                if(activeNotes.empty()){
-                    // Before the first new active note, reset pitch bend on all channels
-                    for(int i = 1; i < 17; i++){
-                        auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(i, 8192);
-                        keepMidiMessages.addEvent(pitchBendResetMessage, 0);
-                    }
-                }
-                activeNotes.push_back(newMessage);
-                keepMidiMessages.addEvent(newMessage, metadata.samplePosition);
+//                if(activeNotes.empty()){
+//                    // Before the first new active note, reset pitch bend on all channels
+//                    for(int i = 2; i < 16; i++){
+//                        auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(i, 8192);
+//                        keepMidiMessages.addEvent(pitchBendResetMessage, 0);
+//                    }
+//                }
+                auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(channel, 8192);
+                activeNotes.push_back(noteOnMessage);
+                keepMidiMessages.addEvent(pitchBendResetMessage, 0);
+                keepMidiMessages.addEvent(noteOnMessage, 0);
             } else {
                 if(targetNotes.empty()){
                     // From the point where we receive the first target note, we start a timer
                     // When that timer is done, we bend the notes
                     targetNotesSampleCounter = 0;
                 }
-                targetNotes.push_back(newMessage);
+                targetNotes.push_back(noteOnMessage);
             }
         }
 

@@ -84,16 +84,16 @@ private:
     int bendDuration = 1000; // ms
     int bendProgress = 0;
 
-    int channelCounter = 2;
+    int channelCounter = 2; // 1 is still global channel in MPE
     std::vector<MidiMessage> activeNotes;
     std::vector<MidiMessage> sourceNotes;
     std::vector<MidiMessage> targetNotes;
     // When we start bending, this will hold the target pitches for each source note
     std::vector<int> sourceNoteTargetPitches;
 
-    std::atomic<bool> acceptActiveNotes = true;
-    std::atomic<bool> acceptTarget = false;
-    std::atomic<bool> isBending = false;
+    bool acceptActiveNotes = true;
+    bool acceptTarget = false;
+    bool isBending = false;
 
     // This one is connected to the message receiver thread
 //    moodycamel::ReaderWriterQueue<MIDIMessage> editorQueue;

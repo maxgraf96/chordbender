@@ -100,11 +100,11 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             std::map<MidiMessage, std::vector<MidiMessage>, ChordBenderAudioProcessor::MidiMessageLess> mapping = findSourceTargetMapping(sourceNotes, targetNotes);
 
             // Let's start with the simple case that we have 1 source note and 2 target notes
-            // Let's assume 3 cases:
-            // 1. sourceNotes.size() == targetNotes.size()
-            if(sourceNotes.size() == targetNotes.size()){
-                for(auto& targetNote : targetNotes){
-                    sourceNoteTargetPitches.push_back(targetNote.getNoteNumber());
+            // Let's assume 2 cases:
+            // 1. sourceNotes.size() >= targetNotes.size()
+            if(sourceNotes.size() >= targetNotes.size()){
+                for(auto& sourceNote : sourceNotes){
+                    sourceNoteTargetPitches.push_back(mapping[sourceNote][0].getNoteNumber());
                 }
             }
 
@@ -144,15 +144,6 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                     }
                 }
             }
-
-            // 3. sourceNotes.size() > targetNotes.size()
-            // In this case, we just need to map multiple source notes to their individual target note
-            if(sourceNotes.size() > targetNotes.size()){
-                for(auto& sourceNote : sourceNotes){
-                    sourceNoteTargetPitches.push_back(mapping[sourceNote][0].getNoteNumber());
-                }
-            }
-
         }
         // We're bending
         // For each source note, send the adequate pitch bend message, depending on the bendProgress / bendDuration
@@ -184,8 +175,6 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
                     8192.0f,
                     (float) pitchBendTarget
             );
-            // Add the pitch bend message to the buffer
-//            keepMidiMessages.addEvent(juce::MidiMessage::pitchWheel(channel , pitchBendValueMapped), 0);
 
             // Construct pitch bend message manually
             auto statusByte = 0xE0 | (channel - 1);
@@ -196,10 +185,10 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             keepMidiMessages.addEvent(pitchBendMessage, 0);
         }
 
-
         // Update the bend progress
-        bendProgress += (int) ((float)buffer.getNumSamples() / 44100.0f * (float) bendDuration);
-        if(bendProgress > bendDuration){
+        auto bufferUpdateRateMS = (int)((float)buffer.getNumSamples() / (float) getSampleRate() * 1000.0f);
+        bendProgress += bufferUpdateRateMS;
+        if(bendProgress >= bendDuration){
             // We're done bending
             isBending = false;
             activeNotes.clear();
@@ -260,13 +249,13 @@ void ChordBenderAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, j
             juce::MidiMessage noteOnMessage = juce::MidiMessage::noteOn(channel, noteNumber, velocity);
 
             if(acceptActiveNotes){
-//                if(activeNotes.empty()){
-//                    // Before the first new active note, reset pitch bend on all channels
-//                    for(int i = 2; i < 16; i++){
-//                        auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(i, 8192);
-//                        keepMidiMessages.addEvent(pitchBendResetMessage, 0);
-//                    }
-//                }
+                if(activeNotes.empty()){
+                    // Before the first new active note, reset pitch bend on all channels
+                    for(int i = 2; i < 16; i++){
+                        auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(i, 8192);
+                        keepMidiMessages.addEvent(pitchBendResetMessage, 0);
+                    }
+                }
                 auto pitchBendResetMessage = juce::MidiMessage::pitchWheel(channel, 8192);
                 activeNotes.push_back(noteOnMessage);
                 keepMidiMessages.addEvent(pitchBendResetMessage, 0);

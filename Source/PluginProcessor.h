@@ -77,11 +77,11 @@ public:
     }
 
 private:
-    int targetNotesReceiveWindowFromFirstNote = 44100; // samples
+    int targetNotesReceiveWindowFromFirstNote = 1000; // samples
     // "Timer" for window for listening to target notes in samples
     int targetNotesSampleCounter = 0;
 
-    int bendDuration = 700; // ms
+    int bendDuration = 250; // ms
     int bendProgress = 0;
 
     int channelCounter = 2; // 1 is still global channel in MPE

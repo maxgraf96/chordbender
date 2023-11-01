@@ -13,7 +13,7 @@ ChordBenderAudioProcessor::ChordBenderAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-)
+), apvts(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
 }
 
@@ -417,6 +417,12 @@ std::map<MidiMessage, std::vector<MidiMessage>, ChordBenderAudioProcessor::MidiM
     }
 
     return mapping;
+}
+
+AudioProcessorValueTreeState::ParameterLayout ChordBenderAudioProcessor::createParameterLayout(){
+    std::vector<std::unique_ptr<RangedAudioParameter>> params;
+    params.push_back(std::make_unique<AudioParameterInt>("bendDuration", "Bend Duration", 100, 3000, 250));
+    return {params.begin(), params.end()};
 }
 
 bool ChordBenderAudioProcessor::hasEditor() const {

@@ -11,6 +11,7 @@ set(SOURCES
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/CustomLookAndFeel.h
+        Source/UI/PNGKnob.cpp
 )
 
 # Define the plugin's headers
@@ -36,8 +37,6 @@ juce_add_plugin(chordbender
         FORMATS VST3 AU Standalone # Add other formats if needed
         PRODUCT_NAME "chordbender")
 
-juce_generate_juce_header(chordbender)
-
 target_sources(chordbender PRIVATE ${SOURCES} ${HEADERS})
 
 #include(FetchContent)
@@ -48,6 +47,14 @@ target_sources(chordbender PRIVATE ${SOURCES} ${HEADERS})
 #)
 #FetchContent_MakeAvailable(readerwriterqueue)
 
+juce_add_binary_data(
+        BinaryData
+        SOURCES
+        Resources/knob.png
+)
+
+juce_generate_juce_header(chordbender)
+
 target_compile_definitions(chordbender
         PRIVATE
         JUCE_WEB_BROWSER=0
@@ -57,6 +64,7 @@ target_compile_definitions(chordbender
 target_link_libraries(chordbender
         PUBLIC
 #        readerwriterqueue
+        BinaryData
 
         PRIVATE
         juce::juce_audio_basics

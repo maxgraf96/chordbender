@@ -76,6 +76,9 @@ public:
         return targetNotes[closestIndex].getNoteNumber();
     }
 
+    AudioProcessorValueTreeState apvts;
+    AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
 private:
     int targetNotesReceiveWindowFromFirstNote = 1000; // samples
     // "Timer" for window for listening to target notes in samples
@@ -95,8 +98,6 @@ private:
     bool acceptTarget = false;
     bool isBending = false;
 
-    // This one is connected to the message receiver thread
-//    moodycamel::ReaderWriterQueue<MIDIMessage> editorQueue;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChordBenderAudioProcessor)
 };
 

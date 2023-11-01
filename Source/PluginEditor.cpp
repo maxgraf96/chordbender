@@ -13,7 +13,6 @@ ChordBenderAudioProcessorEditor::ChordBenderAudioProcessorEditor (ChordBenderAud
 {
     // Set the size of the editor window.
     setSize (400, 300);
-    setResizable(true, true);
 
     titleLabel.setText("chordbender", dontSendNotification);
     titleLabel.setJustificationType(Justification::left);
@@ -30,19 +29,17 @@ ChordBenderAudioProcessorEditor::ChordBenderAudioProcessorEditor (ChordBenderAud
 //    connectedLabel.setColour(Label::backgroundColourId, Colours::red);
     addAndMakeVisible(connectedLabel);
 
-    // Make the text editor multi-line and read-only (if desired)
-    textEditor.setMultiLine(true);
-    textEditor.setReadOnly(true);
-    textEditor.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-    textEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
+    bendDurationSlider.setRange(100, 3000, 1); // Set range with step size of 1
+    addAndMakeVisible(bendDurationSlider);
+    bendDurationSlider.setVisible(false);
 
-    // Add the text editor to the viewport
-    viewport.setViewedComponent(&textEditor, false);
+    // Attach the slider to the parameter in the treeState
+    bendDurationSliderAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "bendDuration", bendDurationSlider);
+    bendDurationSlider.addListener(this); // Add the editor as a listener to the slider
 
-    textEditor.setBounds(0, 0, getParentWidth(), getParentHeight() - 20);
-    addAndMakeVisible(viewport);
-    viewport.setBounds(0, 20, getParentWidth(), getParentHeight() - 20);
-    viewport.setLookAndFeel(&customLookAndFeel);
+    bendDurationKnob = std::make_unique<PNGKnob>(BinaryData::knob_png, BinaryData::knob_pngSize, 60, 60);
+    bendDurationKnob->setBounds(0, 0, 100, 100);
+    addAndMakeVisible(bendDurationKnob.get());
 
     startTimer(50);
 
@@ -65,41 +62,41 @@ void ChordBenderAudioProcessorEditor::resized()
     //viewport.setBounds(getLocalBounds());
     juce::FlexBox flexBox;
     juce::FlexBox titleFlexBox;
+    juce::FlexBox knobFlexBox;
 
     flexBox.flexDirection = juce::FlexBox::Direction::column;  // Vertical layout
 
     titleFlexBox.flexDirection = juce::FlexBox::Direction::row;  // Horizontal layout
     titleFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;  // Put space between the two items
-    titleFlexBox.items.add(juce::FlexItem(titleLabel).withFlex(1));  // titleLabel will take up half the width
+    auto titleMargin = juce::FlexItem::Margin(10, 0, 0, 10);
+    titleFlexBox.items.add(juce::FlexItem(titleLabel).withFlex(1).withMargin(titleMargin));  // titleLabel will take up half the width
     titleFlexBox.items.add(juce::FlexItem(connectedLabel).withFlex(1));  // connectedLabel will take up the other half
-    titleFlexBox.performLayout(Rectangle<float>(0, 0, getWidth(), 20));
+    titleFlexBox.performLayout(Rectangle<float>(0, 0, getWidth(), 30));
 
     // Add the top bar and viewport (containing the text editor) to the main flexbox
-    flexBox.items.add(juce::FlexItem(titleFlexBox).withHeight(20));
-    flexBox.items.add(juce::FlexItem(viewport).withFlex(1));  // The viewport will take up the remaining space
+    flexBox.items.add(juce::FlexItem(titleFlexBox).withHeight(30));
+    flexBox.items.add(juce::FlexItem(knobFlexBox).withFlex(1));  // The viewport will take up the remaining space
+
+    knobFlexBox.flexDirection = juce::FlexBox::Direction::row;  // Horizontal layout
+    knobFlexBox.alignItems = juce::FlexBox::AlignItems::center;
+    knobFlexBox.justifyContent = juce::FlexBox::JustifyContent::center;
+    knobFlexBox.items.add(juce::FlexItem(*bendDurationKnob).withWidth(100).withHeight(200));
+    knobFlexBox.performLayout(Rectangle<float>(0, 0, getWidth(), getHeight() - 20));
 
     // Perform the layout
     flexBox.performLayout(getLocalBounds());
 }
 
+void ChordBenderAudioProcessorEditor::sliderValueChanged(Slider* slider)
+{
+    if (slider == &bendDurationSlider)
+    {
+        float normalizedValue = (slider->getValue() - slider->getMinimum()) / (slider->getMaximum() - slider->getMinimum());
+        bendDurationSlider.setValue(normalizedValue);
+    }
+}
+
 void ChordBenderAudioProcessorEditor::timerCallback()
 {
     repaint();
-
-//    if(processor.getConnected()){
-//        connectedLabel.setColour(juce::Label::backgroundColourId, juce::Colours::darkgreen);
-//        connectedLabel.setText("Connected to " + processor.getSenderIP(), dontSendNotification);
-//        textEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colours::darkgreen);
-//    } else {
-//        connectedLabel.setColour(juce::Label::backgroundColourId, juce::Colours::red);
-//        connectedLabel.setText("Not connected", dontSendNotification);
-//        textEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
-//    }
-
-    // Empty the queue
-//    MIDIMessage message;
-//    while(editorQueue.try_dequeue(message)){
-//        textEditor.moveCaretToEnd();
-//        textEditor.insertTextAtCaret(message.toString() + "\n");
-//    }
 }

@@ -10,16 +10,17 @@ PNGKnob::PNGKnob(const char *imageData, size_t dataSize, int w, int h) {
 
     // Configure and add the name label
     nameLabel = std::make_unique<Label>("nameLabel", "Bend Duration");
+    nameLabel->setFont(Font("Helvetica", 18.0f, Font::plain));
     nameLabel->setJustificationType(Justification::centred);
     nameLabel->setColour(Label::textColourId, Colours::white);
-    nameLabel->setBounds(0, 0, 100, 20);
+    nameLabel->setBounds(0, 10, 140, 20);
     addAndMakeVisible(*nameLabel);
 
     // Configure and add the value label
     valueLabel = std::make_unique<Label>("valueLabel", "0");
     valueLabel->setJustificationType(Justification::centred);
     valueLabel->setColour(Label::textColourId, Colours::white);
-    valueLabel->setBounds(0, 120, 100, 20);
+    valueLabel->setBounds(0, 110, 140, 20);
     addAndMakeVisible(*valueLabel);
 }
 
@@ -34,25 +35,6 @@ void PNGKnob::paint(Graphics &g) {
 }
 
 void PNGKnob::resized() {
-//    FlexBox flexBox;
-//    flexBox.flexDirection = FlexBox::Direction::column;
-//    flexBox.justifyContent = FlexBox::JustifyContent::center;
-//    flexBox.alignItems = FlexBox::AlignItems::center;
-//
-//    // Add the name label to the flexbox
-//    FlexItem nameLabelItem(nameLabel->getWidth(), nameLabel->getHeight());
-//    nameLabelItem.associatedComponent = nameLabel.get();
-//
-//    // Add the knob (PNG image) to the flexbox
-//    FlexItem knobImageItem(getWidth(), knobImage.getHeight());
-//
-//    // Add the value label to the flexbox
-//    FlexItem valueLabelItem(valueLabel->getWidth(), valueLabel->getHeight());
-//    valueLabelItem.associatedComponent = valueLabel.get();
-//
-//    flexBox.items.addArray({ nameLabelItem, knobImageItem, valueLabelItem });
-//
-//    flexBox.performLayout(getLocalBounds());
 }
 
 AffineTransform PNGKnob::getRotationTransform() const {

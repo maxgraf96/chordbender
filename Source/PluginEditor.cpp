@@ -16,14 +16,16 @@ ChordBenderAudioProcessorEditor::ChordBenderAudioProcessorEditor (ChordBenderAud
 
     titleLabel.setText("chordbender", dontSendNotification);
     titleLabel.setJustificationType(Justification::left);
-    titleLabel.setFont(Font(18.0f, Font::italic));
+    titleLabel.setFont(Font("Helvetica", 18.0f, Font::italic));
     titleLabel.setColour(Label::textColourId, Colours::white);
     titleLabel.setBounds(0, 0, 200, 20);
     addAndMakeVisible(titleLabel);
+    // rotate the title label
+    titleLabel.setTransform(AffineTransform::rotation(-juce::MathConstants<float>::pi / 23.5, titleLabel.getLocalBounds().getCentreX(), titleLabel.getLocalBounds().getCentreY()));
 
     connectedLabel.setText("", dontSendNotification);
     connectedLabel.setJustificationType(Justification::right);
-    connectedLabel.setFont(Font(18.0f, Font::italic));
+    connectedLabel.setFont(Font("Helvetica", 18.0f, Font::italic));
     connectedLabel.setColour(Label::textColourId, Colours::white);
     connectedLabel.setBounds(180, 0, 100, 20);
 //    connectedLabel.setColour(Label::backgroundColourId, Colours::red);
@@ -38,7 +40,7 @@ ChordBenderAudioProcessorEditor::ChordBenderAudioProcessorEditor (ChordBenderAud
     bendDurationSlider.addListener(this); // Add the editor as a listener to the slider
 
     bendDurationKnob = std::make_unique<PNGKnob>(BinaryData::knob_png, BinaryData::knob_pngSize, 60, 60);
-    bendDurationKnob->setBounds(0, 0, 100, 100);
+    bendDurationKnob->setBounds(0, 0, 140, 100);
     addAndMakeVisible(bendDurationKnob.get());
 
     startTimer(50);
@@ -55,6 +57,12 @@ void ChordBenderAudioProcessorEditor::paint (juce::Graphics& g)
 {
     // Clear the background
     g.fillAll (juce::Colours::black);
+
+    // Render a line between the title and the viewport
+    // Set the color for the border
+    g.setColour (juce::Colours::lightgrey);
+    // Draw a line for the top border
+    g.drawLine (0, 60, getWidth(), 0, 1); // The last parameter is the line thickness
 }
 
 void ChordBenderAudioProcessorEditor::resized()
@@ -80,7 +88,7 @@ void ChordBenderAudioProcessorEditor::resized()
     knobFlexBox.flexDirection = juce::FlexBox::Direction::row;  // Horizontal layout
     knobFlexBox.alignItems = juce::FlexBox::AlignItems::center;
     knobFlexBox.justifyContent = juce::FlexBox::JustifyContent::center;
-    knobFlexBox.items.add(juce::FlexItem(*bendDurationKnob).withWidth(100).withHeight(200));
+    knobFlexBox.items.add(juce::FlexItem(*bendDurationKnob).withWidth(140).withHeight(200));
     knobFlexBox.performLayout(Rectangle<float>(0, 0, getWidth(), getHeight() - 20));
 
     // Perform the layout
